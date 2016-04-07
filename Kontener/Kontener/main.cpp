@@ -2,6 +2,7 @@
 #include <fstream>
 #include <string>
 #include <cstdio>
+#include <algorithm>
 
 using namespace std;
 
@@ -15,6 +16,8 @@ struct storageLocation
 	int x;	//row coordinate(0, 1, 2, 3)
 	int y;	//column coordinate(0, 1, 2, 3)
 	int z;	//level(0, 1, 2)
+	int czas; // czas transportu
+	int status; // wolne (0) czy zajete(1)
 };
 
 struct container
@@ -38,10 +41,20 @@ int main()
 {
 	int numer_pliku;
 	int l_maszyn;
-	int x, y;
+	int x, y,z=3;
 	int l_kontenerow;
 	container* c;
 	maszyna *dzwig;
+	storageLocation *magazyn;
+
+	const int lock = 30; //30 seconds to lock on a container
+	const int vellocity = 1; //1 meter per second, speed of machine
+	const int move = 30; //time required to move the container to ajacent position
+	const int rw = 5;	//row width meter
+	const int cw = 5;	//column width meter
+	double totalTime = 0;
+	double timeTaken; //time taken to handle one container
+
 
 /*otwarcie pliku z ustawieniami*/
 	ifstream plik;
@@ -103,10 +116,17 @@ int main()
 	}
 	plik2.close();
 
+	if (x*y*z < l_kontenerow) {
+		cout << "Za malo miejsca";
+		system("pause");
+		return 0;
+	}
 
-	int zmienna = 0;  // przydzielenie pozycji
+	magazyn = new storageLocation[x*y*z];
+
+	int zmienna = 0;  // obliczenie czasu transportu do kazdej pozycji i przydzielenie numeru
 	int i = 0, j = 0, k = 0;
-	while (zmienna != l_kontenerow)
+	while (zmienna != x*y*z)
 	{
 		if (i == x) { 
 			i = 0; 
@@ -116,51 +136,80 @@ int main()
 				k++;
 			}
 		}
-		c[zmienna].location.x = i;
-		c[zmienna].location.y = j;
-		c[zmienna].location.z = k;
+		magazyn[zmienna].x = i;
+		magazyn[zmienna].y = j;
+		magazyn[zmienna].z = k;
+		magazyn[zmienna].number = zmienna;
+		magazyn[zmienna].status = 0;
+		if (magazyn[zmienna].z == 0) {
+			magazyn[zmienna].czas = lock + ((rw * magazyn[zmienna].x + cw * magazyn[zmienna].y) / vellocity) + lock;//travel time
+
+		}
+		else {
+			magazyn[zmienna].czas = lock + ((rw * magazyn[zmienna].x + cw * magazyn[zmienna].y) / vellocity) + lock;//travel time
+			magazyn[zmienna].czas += (magazyn[zmienna].z * (4 * lock + move)) + (2 * lock) + move; //handle container time
+		}
+
 		i++;
 		zmienna++;
 	}
 
+	for (int i = 0; i < x*y*z; i++)
+	{
+		cout << "numer: " << magazyn[i].number << "  czas: " << magazyn[i].czas << "  x: " << magazyn[i].x << "  y: " << magazyn[i].y << "  z: " << magazyn[i].z << endl;
+	}
+	int low = 10000000;
 
+	for (int i = 0; i < l_kontenerow; i++) { // ustawienie kontenerow od najblizszego miejsca do najdalszego
+		low = 10000000;
+		for (int j = 0; j < x*y*z; j++) { // znalezienie najblizszego miejsca
+			if (magazyn[j].status == 0) { //jezeli wolne
 
-
-
-	const int lock = 30; //30 seconds to lock on a container
-	const int vellocity = 1; //1 meter per second, speed of machine
-	const int move = 30; //time required to move the container to ajacent position
-	const int rw = 5;	//row width meter
-	const int cw = 5;	//column width meter
-	double totalTime = 0;
-	double timeTaken; //time taken to handle one container
-
-
-
-	for (int i = 0; i < l_kontenerow; i++) { //czas transportu
-
-		if (c[i].location.z == 0) {
-			timeTaken = lock + ((rw * c[i].location.x + cw * c[i].location.y) / vellocity) + lock;//travel time
-			totalTime += timeTaken;
+				/*if (magazyn[j].z != 0) { // jezeli pod spodem juz jest kontener, to sprawdz czasy
+					for (int k = 0; k < l_kontenerow; k++){
+						if (c[k].location.x == magazyn[j].x && c[k].location.y == magazyn[j].y) { // znajdowanie tego na dole
+							if (c[i].depart < c[k].depart) { // jezeli dolny odjezdza pozniej, to ustawiaj na gorze nowego
+								low = min(low, magazyn[j].czas); // sprawdz czy najblizej
+							}
+						}
+					}
+				}
+				else {
+					low = min(low, magazyn[j].czas); // sprawdz czy najblizej
+				}*/
+				low = min(low, magazyn[j].czas); // sprawdz czy najblizej
+			}
 		}
-		else {
-			timeTaken = lock + ((rw * c[i].location.x + cw * c[i].location.y) / vellocity) + lock;//travel time
-			timeTaken += (c[i].location.z * (4 * lock + move)) + (2 * lock) + move; //handle container time
-			totalTime += timeTaken;
+		for (int j = 0; j < x*y*z; j++) { //przypisanie znalezionego miejsca
+			if (low == magazyn[j].czas)
+			{
+				if (magazyn[j].status == 0) {
+					c[i].location = magazyn[j];
+					magazyn[j].status = 1;
+					break;
+				}
+			}
 		}
 	}
+
+
+	for (int i = 0; i < l_kontenerow; i++) { // ustawienie kontenerow od najblizszego miejsca do najdalszego
+		totalTime += c[i].location.czas;
+	}
+
 
 	cout << totalTime << endl;
 
 	
 	for (int i = 0; i < l_kontenerow; i++) {
-		cout << "Container number: " << c[i].number << " is in location: " << c[i].machine <<
-			" (row: " << c[i].location.x <<
+		cout << "Container number: " << c[i].number << " is in location: " << c[i].location.number << endl;
+			/*" (row: " << c[i].location.x <<
 			" column: " << c[i].location.y <<
-			" level: " << c[i].location.z << ")" << endl;
+			" level: " << c[i].location.z << ")" << endl;*/
 	}
 	delete[] c;
 	delete[] dzwig;
+	delete[] magazyn;
 	cout << "Hello World! Dwa";
 	cout << endl;
 	system("pause");
